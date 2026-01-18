@@ -1,14 +1,14 @@
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 
-from database import init_db, close_db
-from routes import movie_router
+from src.database import reset_sqlite_database
+from src.routes.movies import router as movie_router
+from src.database.session import init_db, close_db
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await init_db()
+    await reset_sqlite_database()
     yield
     await close_db()
 
