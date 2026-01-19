@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from math import ceil
@@ -20,21 +21,22 @@ async def list_movies(
         db: AsyncSession = Depends(get_db),
 ):
 
-    result = await db.execute(select(MovieModel))
-    all_movies = result.scalars().all()
-    total_items = len(all_movies)
+    total_items = (await db.execute(select(func.count()).select_from(MovieModel))).scalar()
 
     if total_items == 0:
         raise HTTPException(status_code=404, detail="No movies found.")
 
     total_pages = ceil(total_items / per_page)
 
-    if page > total_items:
+    if page > total_pages:
         raise HTTPException(status_code=404, detail="No movies found.")
 
-    start = (page - 1) * per_page
-    end = start + per_page
-    movies_slice = all_movies[start:end]
+    result = await db.execute(
+        select(MovieModel)
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+    )
+    movies_slice = result.scalars().all()
 
     if not movies_slice:
         raise HTTPException(status_code=404, detail="No movies found.")
@@ -58,8 +60,8 @@ async def list_movies(
         for m in movies_slice
     ]
 
-    prev_page = None if page == 1 else f"/api/v1/theater/movies/?page={page-1}&per_page={per_page}"
-    next_page = None if page == total_pages else f"/api/v1/theater/movies/?page={page+1}&per_page={per_page}"
+    prev_page = None if page == 1 else f"/theater/movies/?page={page-1}&per_page={per_page}"
+    next_page = None if page == total_pages else f"/theater/movies/?page={page+1}&per_page={per_page}"
 
     return MovieListResponseSchema(
         movies=movie_items,
@@ -92,7 +94,7 @@ async def get_movie_detail(
         orig_title=movie.orig_title,
         status=movie.status,
         orig_lang=movie.orig_lang,
-        budget=int(movie.budget) if movie.budget is not None else 0.0,
+        budget=float(movie.budget) if movie.budget is not None else 0.0,
         revenue=movie.revenue,
         country=movie.country,
     )
